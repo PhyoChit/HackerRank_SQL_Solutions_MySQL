@@ -1,23 +1,34 @@
--- Selects the pivoted columns for each occupation with conditional aggregation
-SELECT 
-    -- For each group of names having the same row number, select the name if it belongs to 'Doctor'
-    -- Otherwise, return NULL. Then, use MAX to effectively pick the name (since there's only one name per group per occupation)
-    MAX(CASE WHEN OCCUPATION = 'Doctor' THEN NAME END) AS Doctor, 
-    -- Repeat the process for 'Professor'
-    MAX(CASE WHEN OCCUPATION = 'Professor' THEN NAME END) AS Professor, 
-    -- Repeat the process for 'Singer'
-    MAX(CASE WHEN OCCUPATION = 'Singer' THEN NAME END) AS Singer, 
-    -- Repeat the process for 'Actor'
-    MAX(CASE WHEN OCCUPATION = 'Actor' THEN NAME END) AS Actor 
--- From a subquery that assigns a row number to each name within each occupation group
-FROM (
-    -- Select all columns from OCCUPATIONS and also generate a row number (RN)
-    -- Row numbers are reset and start from 1 for each occupation group
-    SELECT *, ROW_NUMBER() OVER(PARTITION BY OCCUPATION ORDER BY NAME) AS RN 
+-- Define a CTE named 'RankedOccupations' to preprocess the data.
+-- This CTE will assign a unique row number to each name within its occupation group, ordered alphabetically.
+-- This ordering is crucial for the final alignment of names under their respective occupations.
+WITH RankedOccupations AS (
+    SELECT
+        -- Select occupation and name directly from the original table.
+        OCCUPATION,
+        NAME,
+        -- Generate a row number for each name, partitioned by occupation.
+        -- This means the row numbering starts over for each occupation group.
+        -- The row numbers are assigned based on alphabetical order of names within each occupation.
+        ROW_NUMBER() OVER(PARTITION BY OCCUPATION ORDER BY NAME) AS RN
     FROM OCCUPATIONS
-    -- Alias the subquery as 'temp' for use in the outer query
-) AS temp 
--- Group the results by the row number to align names across occupations in the output
+)
+
+-- After defining the CTE, proceed to use it for the final selection.
+SELECT 
+    -- For each group of names that have been assigned the same row number (RN) across different occupations,
+    -- select the doctor's name. If there's no doctor for a specific row number, this will be NULL.
+    MAX(CASE WHEN OCCUPATION = 'Doctor' THEN NAME END) AS Doctor, 
+    -- Similarly, select the professor's name for the same row number. Return NULL if there isn't one.
+    MAX(CASE WHEN OCCUPATION = 'Professor' THEN NAME END) AS Professor, 
+    -- Select the singer's name for the row. Again, NULL is returned for rows without a singer.
+    MAX(CASE WHEN OCCUPATION = 'Singer' THEN NAME END) AS Singer, 
+    -- Select the actor's name for the row, with NULL for rows without an actor.
+    MAX(CASE WHEN OCCUPATION = 'Actor' THEN NAME END) AS Actor 
+FROM RankedOccupations
+-- Group the query results by RN, the row number assigned within each occupation group.
+-- This is essential for aligning names from different occupations in the output,
+-- ensuring that each row in the final result corresponds to the same 'rank' across occupations.
 GROUP BY RN 
--- Order the final result set by the row number to maintain the alphabetical ordering within each occupation
+-- Order the results by RN to maintain the alphabetical order of names within each occupation in the final output.
+-- This ensures that the first row contains the first names alphabetically from each occupation, and so on.
 ORDER BY RN;
